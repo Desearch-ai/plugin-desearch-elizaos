@@ -1,0 +1,55 @@
+{
+  "name": "@desearch/plugin-desearch",
+  "version": "0.1.0",
+  "description": "Web search for elizaOS agents using the Desearch API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "live_check": "node scripts/live_check.mjs"
+  },
+  "keywords": [
+    "elizaos",
+    "eliza",
+    "plugin",
+    "desearch",
+    "search"
+  ],
+  "license": "MIT",
+  "author": "Desearch <dev@desearch.ai>",
+  "peerDependencies": {
+    "@elizaos/core": "^1.7.2"
+  },
+  "devDependencies": {
+    "@elizaos/core": "1.7.2",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "agentConfig": {
+    "pluginType": "elizaos:plugin:1.0.0",
+    "pluginParameters": {
+      "DESEARCH_API_KEY": {
+        "type": "string",
+        "description": "Desearch API key. Supply only through the DESEARCH_API_KEY environment variable.",
+        "required": true
+      }
+    }
+  }
+}
