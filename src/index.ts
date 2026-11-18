@@ -1,4 +1,11 @@
-import { Service, type Action, type IAgentRuntime, type Plugin } from '@elizaos/core';
+import {
+  Service,
+  type Action,
+  type ActionResult,
+  type HandlerCallback,
+  type IAgentRuntime,
+  type Plugin,
+} from '@elizaos/core';
 import { hasApiKey, searchWeb } from './client.js';
 export { searchWeb, type SearchResult } from './client.js';
 
@@ -22,6 +29,14 @@ export class DesearchService extends Service {
   }
 }
 
+const SEARCH_FAILED = 'Desearch search failed. Check configuration and request parameters.';
+
+/** Returns a failed result and sends the same fixed text once through the chat callback, if any. */
+async function fail(error: string, callback?: HandlerCallback): Promise<ActionResult> {
+  if (callback) await callback({ text: error, actions: ['DESEARCH_WEB_SEARCH'] });
+  return { success: false, error };
+}
+
 export const desearchWebSearchAction: Action = {
   name: 'DESEARCH_WEB_SEARCH',
   similes: ['SEARCH_WEB_DESEARCH'],
@@ -40,17 +55,17 @@ export const desearchWebSearchAction: Action = {
   validate: async (runtime) => hasApiKey() && Boolean(runtime.getService(DesearchService.serviceType)),
   handler: async (runtime, message, _state, options, callback) => {
     const service = runtime.getService<DesearchService>(DesearchService.serviceType);
-    if (!service) return { success: false, error: 'Desearch service is unavailable' };
+    if (!service) return fail('Desearch service is unavailable', callback);
     const query = options?.query ?? message.content.text;
     const num = options?.num ?? 10;
     if (typeof query !== 'string' || typeof num !== 'number') {
-      return { success: false, error: 'Expected a string query and numeric num' };
+      return fail('Expected a string query and numeric num', callback);
     }
     let results;
     try {
       results = await service.search(query, num);
     } catch {
-      return { success: false, error: 'Desearch search failed. Check configuration and request parameters.' };
+      return fail(SEARCH_FAILED, callback);
     }
     const text = results.length
       ? results.map((r) => `${r.title}\n${r.link}\n${r.snippet}`).join('\n\n')
