@@ -119,4 +119,61 @@ describe('elizaOS integration', () => {
     fetchMock.mockRejectedValue(new Error('private details'));
     expect(await action.handler(runtime, message)).toEqual({ success: false, error: 'Desearch search failed. Check configuration and request parameters.' });
   });
+
+  const failureText = 'Desearch search failed. Check configuration and request parameters.';
+  const leakPattern = /unit-test-placeholder|Bearer|private details|sensitive|upstream-vendor|HTTP 40|HTTP 50/i;
+
+  it.each([
+    ['invalid key (401)', () => new Response('{"detail":"Invalid API key unit-test-placeholder via upstream-vendor"}', { status: 401 })],
+    ['server error (500)', () => new Response('sensitive upstream-vendor stack trace', { status: 500 })],
+    ['malformed body', () => new Response('not json from upstream-vendor')],
+  ])('sends one cleaned-up failure reply through the callback on %s', async (_label, makeResponse) => {
+    fetchMock.mockResolvedValue(makeResponse());
+    const callback = vi.fn().mockResolvedValue([]);
+    const response = await action.handler(runtime, message, undefined, { query: 'x' }, callback);
+    expect(response).toEqual({ success: false, error: failureText });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith({ text: failureText, actions: ['DESEARCH_WEB_SEARCH'] });
+    expect(JSON.stringify(callback.mock.calls)).not.toMatch(leakPattern);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('sends one cleaned-up failure reply on network errors', async () => {
+    fetchMock.mockRejectedValue(new Error('private details for unit-test-placeholder'));
+    const callback = vi.fn().mockResolvedValue([]);
+    expect(await action.handler(runtime, message, undefined, {}, callback)).toEqual({ success: false, error: failureText });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback.mock.calls[0][0].text).toBe(failureText);
+    expect(JSON.stringify(callback.mock.calls)).not.toMatch(leakPattern);
+  });
+  it('sends a failure reply for missing service and bad parameters', async () => {
+    const callback = vi.fn().mockResolvedValue([]);
+    expect(await action.handler(runtime, message, undefined, { num: '2' }, callback))
+      .toEqual({ success: false, error: 'Expected a string query and numeric num' });
+    expect(callback).toHaveBeenLastCalledWith({ text: 'Expected a string query and numeric num', actions: ['DESEARCH_WEB_SEARCH'] });
+    runtime.getService = vi.fn(() => null);
+    expect(await action.handler(runtime, message, undefined, {}, callback))
+      .toEqual({ success: false, error: 'Desearch service is unavailable' });
+    expect(callback).toHaveBeenLastCalledWith({ text: 'Desearch service is unavailable', actions: ['DESEARCH_WEB_SEARCH'] });
+    expect(callback).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('sends exactly one success reply with results and URLs, unchanged', async () => {
+    const callback = vi.fn().mockResolvedValue([]);
+    const response = await action.handler(runtime, message, undefined, { query: 'x' }, callback);
+    const text = `${result.title}\n${result.link}\n${result.snippet}`;
+    expect(response).toEqual({ success: true, text, data: { results: [result] } });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith({ text, actions: ['DESEARCH_WEB_SEARCH'] });
+  });
+  it('sends the no-results reply once on empty results', async () => {
+    fetchMock.mockResolvedValue(new Response('{"data":[]}'));
+    const callback = vi.fn().mockResolvedValue([]);
+    expect(await action.handler(runtime, message, undefined, {}, callback)).toMatchObject({ success: true, text: 'No search results found.' });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith({ text: 'No search results found.', actions: ['DESEARCH_WEB_SEARCH'] });
+  });
+  it('returns failures without a callback as before', async () => {
+    fetchMock.mockResolvedValue(new Response('x', { status: 401 }));
+    expect(await action.handler(runtime, message)).toEqual({ success: false, error: failureText });
+  });
 });
